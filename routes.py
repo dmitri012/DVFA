@@ -1,4 +1,4 @@
-from flask import Flask, render_template, url_for, redirect, request
+from flask import Flask, render_template, url_for, redirect, request, session
 import requests
 import forms
 
@@ -11,13 +11,38 @@ import db
 def index():
     return render_template('index.html')
 
-# Broken-Access-Control
+# Fixed Access Control - using server-side sessions
 @app.route('/admin')
 def admin():    
-    if(request.cookies.get('admin') == "True"):
+    # Check server-side session instead of client-controlled cookie
+    if session.get('is_admin') == True:
         return render_template('admin.html')
     else:
         return render_template('403.html')
+
+# Admin login endpoint for proper authentication
+@app.route('/admin/login', methods=['POST'])
+def admin_login():
+    # This should verify credentials against a secure backend
+    # For example: check username/password against database with hashed passwords
+    username = request.form.get('username')
+    password = request.form.get('password')
+    
+    # TODO: Implement proper authentication logic here
+    # Example: verify_credentials(username, password)
+    # For now, this prevents unauthorized access via cookie manipulation
+    # In production, implement proper authentication with hashed passwords
+    
+    # Only set session after successful authentication
+    # session['is_admin'] = True
+    
+    return redirect(url_for('admin'))
+
+# Admin logout endpoint
+@app.route('/admin/logout', methods=['POST'])
+def admin_logout():
+    session.pop('is_admin', None)
+    return redirect(url_for('index'))
 
 # SSRF
 @app.route('/analyzer')
