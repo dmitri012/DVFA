@@ -1,6 +1,9 @@
 from flask import Flask, render_template, url_for, redirect, request, session
 import requests
 import forms
+import ipaddress
+import socket
+from urllib.parse import urlparse
 
 from app import app
 import db
@@ -47,27 +50,72 @@ def logout():
     session.clear()
     return redirect(url_for('index'))
 
-# SSRF
+# URL analyzer with SSRF protection
 @app.route('/analyzer')
 def follow_url():
     url = request.args.get('url', '')
     if url:
-        r = requests.get(url)
-        return render_template('analyzer.html', req=r)
+        # Validate URL to prevent SSRF attacks
+        if not is_safe_url(url):
+            return render_template('analyzer-empty-state.html', error='Invalid or unsafe URL')
+        
+        try:
+            r = requests.get(url, timeout=5)
+            return render_template('analyzer.html', req=r)
+        except requests.exceptions.RequestException:
+            return render_template('analyzer-empty-state.html', error='Failed to fetch URL')
     else:
         return render_template('analyzer-empty-state.html')
+
+
+def is_safe_url(url):
     """
-    Prevention:
-        import ipaddress
-        import socket
-        from urllib.parse import urlparse
-        domain = urlparse(url).netloc
-        ip = socket.gethostbyname(domain)
-        if(not ipaddress.ip_address(ip).is_private):
-            return render_template('analyzer.html', req=r)
-        else:
-            return render_template('analyzer-empty-state.html')
+    Validate URL to prevent SSRF attacks.
+    Checks:
+    - Scheme is http or https only
+    - Hostname is in allowlist
+    - IP address is not private, loopback, link-local, or multicast
     """
+    try:
+        parsed = urlparse(url)
+        
+        # Validate scheme - only allow http and https
+        if parsed.scheme not in ('http', 'https'):
+            return False
+        
+        # Extract hostname
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        
+        # Allowlist of permitted domains
+        # Modify this list based on your application's requirements
+        allowed_domains = [
+            'example.com',
+            'www.example.com',
+            'api.example.com',
+            # Add other trusted domains here
+        ]
+        
+        # Check if hostname is in allowlist
+        if hostname not in allowed_domains:
+            return False
+        
+        # Resolve hostname to IP address and validate
+        try:
+            ip = socket.gethostbyname(hostname)
+            ip_obj = ipaddress.ip_address(ip)
+            
+            # Block private, loopback, link-local, and multicast addresses
+            if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_multicast:
+                return False
+        except (socket.gaierror, ValueError):
+            # DNS resolution failed or invalid IP
+            return False
+        
+        return True
+    except Exception:
+        return False
 
 # XSS, CSRF (no CSRF-Token)
 @app.route('/guestbook', methods=['GET', 'POST'])
