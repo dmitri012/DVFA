@@ -1,7 +1,23 @@
 from flask import Flask
+import os
+import secrets
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = "suchSecret"
+
+# Load SECRET_KEY from environment variable
+secret_key = os.environ.get('SECRET_KEY')
+if not secret_key:
+    # For development only: generate a random secret key
+    # In production, always set SECRET_KEY environment variable
+    import warnings
+    warnings.warn(
+        "SECRET_KEY environment variable not set. Using a randomly generated key. "
+        "This is insecure for production use. Set SECRET_KEY environment variable.",
+        UserWarning
+    )
+    secret_key = secrets.token_hex(32)
+
+app.config['SECRET_KEY'] = secret_key
 
 from routes import *
 
